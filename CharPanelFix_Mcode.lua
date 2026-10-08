@@ -81,6 +81,8 @@
           错误照常上报错误处理器（BugSack 可查，附组件名），但单个组件出错不再
           连坐后面的组件。③ modelControls 并入每秒重施循环：漏装时面板开着
           最迟 1 秒自愈。
+    v1.9.1：周期重施同样隔离各组件错误；空壳检查实际字体、回退 GameFontNormal，
+          字体及文本有效后才公开。暂时无法初始化时保留隐藏对象供下一轮重试。
 
 ----------------------------------------------------------------------------]]
 
@@ -486,25 +488,37 @@ end
 -- 里的高清重复标签）；[2][3] 是 GearScoreLite 的标签/数字，在场时常显（见下）
 local GS_NAMES = { "GearScore2_B", "GearScore2", "PersonalGearScore" }
 
--- 客户端那段高清装备等级的代码会读 PersonalGearScore:GetText() 来拼字符串。
--- 这两个全局本来是 GearScoreLite 建的；万一它被关掉了，客户端会因为索引 nil 直接
--- 报错。这里补一个隐藏的空壳顶上，保证那条链路永远不炸。
+-- 原 HD 在 GS 对象缺席时已有平均装等回退。兼容空壳只在初始化完成后公开，
+-- 避免让原客户端走到存在对象、但 GetText 仍为 nil 的分支。
+local gsStubCache = {}
 local function EnsureGearScoreStub()
     local pdf = Name2Frame("PaperDollFrame")
     if not pdf or not pdf.CreateFontString then return end
 
-    -- 空壳必须先设字体再 SetText：这个 HD 客户端的引擎对没有字体的字体串
-    -- 调 SetText 会直接报 "Font not set"（20261008 定位：GSL 缺席时这里炸过，
-    -- 错误把当轮 ApplyAll 中断在 clientGS，模型交互等排在后面的组件整场
-    -- 没装上）。字体照抄 GearScoreLite 自己的写法；SetFont 万一失败就不
-    -- SetText —— 空壳只要存在就能防住那条 GetText 链路的 nil 索引，
-    -- 宁缺文本也不能再报错。
+    local function hasFont(fs)
+        local ok, path, size = pcall(fs.GetFont, fs)
+        return ok and type(path) == "string" and path ~= ""
+            and type(size) == "number" and size > 0
+    end
     local function makeStub(name)
         if Name2Frame(name) then return end
-        local fs = pdf:CreateFontString(name)
-        local ok, res = pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", 10)
-        if ok and res ~= false then fs:SetText("") end
+        -- 不用全局名字创建半成品；失败时保留隐藏对象，下一轮重试同一对象。
+        local fs = gsStubCache[name]
+        if not fs then
+            fs = pdf:CreateFontString(nil)
+            gsStubCache[name] = fs
+        end
         fs:Hide()
+        pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", 10)
+        if not hasFont(fs) and fs.SetFontObject and G.GameFontNormal then
+            pcall(fs.SetFontObject, fs, G.GameFontNormal)
+        end
+        if not hasFont(fs) then return end
+        local ok = pcall(fs.SetText, fs, "")
+        if not ok then return end
+        local readable, text = pcall(fs.GetText, fs)
+        if not readable or type(text) ~= "string" then return end
+        G[name] = fs
     end
 
     makeStub("PersonalGearScore")
@@ -512,15 +526,10 @@ local function EnsureGearScoreStub()
 end
 
 local function ApplyClientGS()
-    -- v1.2 起整个组件（含 EnsureGearScoreStub）都在门控之内：没有 Enhanced 时
-    -- GearScoreLite 通常也在（它们是同一套整合包配置），保险用不上；真缺席时
-    -- 客户端 HD 装等代码会因索引 nil 报错 —— 那是"没装 ElvUI 且没装 GearScoreLite"
-    -- 组合下客户端自己的问题，与本插件无关。
+    -- 没有 Enhanced 时保留原角色面板；缺 GS 对象的路径由原 HD 回退处理。
     if not CharModuleActive() then return end
 
-    -- 客户端 HD 装等代码会读 PersonalGearScore:GetText() 来拼字符串；这两个全局
-    -- 本来是 GearScoreLite 建的，它被关掉时客户端会因索引 nil 直接报错。
-    -- 这里补一个隐藏的空壳顶上，保证那条链路永远不炸。
+    -- 仅补缺失的兼容对象，不改 GearScoreLite 自己创建的对象。
     EnsureGearScoreStub()
 
     -- 客户端烤在 MPQ 里的高清重复块（重复的"物品等级"标签）照旧隐藏，给
@@ -1625,17 +1634,17 @@ f:SetScript("OnUpdate", function(self, dt)
 
     local d = DB()
 
-    if d.sidebar then EnforceSidebar() end
-    if d.clientGS then ApplyClientGS() end
-    if d.clientStatPanels then ApplyClientStatPanels() end
-    if d.clientToggleButtons then ApplyClientToggleButtons() end
-    if d.tabAnchor then ApplyTabAnchor() end
-    if d.enhancedGeometry then FixAllCategoriesNow() end
+    if d.sidebar then RunComponent("sidebar", EnforceSidebar) end
+    if d.clientGS then RunComponent("clientGS", ApplyClientGS) end
+    if d.clientStatPanels then RunComponent("clientStatPanels", ApplyClientStatPanels) end
+    if d.clientToggleButtons then RunComponent("clientToggleButtons", ApplyClientToggleButtons) end
+    if d.tabAnchor then RunComponent("tabAnchor", ApplyTabAnchor) end
+    if d.enhancedGeometry then RunComponent("enhancedGeometry", FixAllCategoriesNow) end
     -- 模型只补一次，SetUnit 会重置朝向，不能每轮都调（ApplyModel 内部有判断）
-    if d.model then ApplyModel() end
+    if d.model then RunComponent("model", ApplyModel) end
     -- 模型交互：已装时只是重抬槽位（幂等）；哪一轮没装上，面板开着最迟 1 秒
     -- 由这里补上（20261008：曾因 clientGS 报错整场没装上，只能靠 /cpfix reload）
-    if d.modelControls then ApplyModelControls() end
+    if d.modelControls then RunComponent("modelControls", ApplyModelControls) end
 end)
 
 --------------------------------------------------------------------------
