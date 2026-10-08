@@ -74,6 +74,13 @@
           "平均物品等级"完全同口径。固定 ÷16 是 GS 时代的"16 部位"惯例：副手填上
           后 17 件全计总分再 ÷16，会虚高 17/16≈6.25%（Pcode 的 288 vs 271.71
           就是这个差）。显示仍只保留整数。
+    v1.9：① GS 空壳（GSL 缺席时补建的 PersonalGearScore / GearScore2）改为先设字体
+          再 SetText —— 本客户端对无字体字体串 SetText 会报 "Font not set"，此前
+          这个错误会冲出 ApplyAll、把当轮排在后面的组件一起带停（GSL 关闭时的
+          表现就是模型交互整场没装上、转不动）。② ApplyAll 改为逐组件 pcall：
+          错误照常上报错误处理器（BugSack 可查，附组件名），但单个组件出错不再
+          连坐后面的组件。③ modelControls 并入每秒重施循环：漏装时面板开着
+          最迟 1 秒自愈。
 
 ----------------------------------------------------------------------------]]
 
@@ -486,16 +493,22 @@ local function EnsureGearScoreStub()
     local pdf = Name2Frame("PaperDollFrame")
     if not pdf or not pdf.CreateFontString then return end
 
-    if not Name2Frame("PersonalGearScore") then
-        local fs = pdf:CreateFontString("PersonalGearScore")
-        fs:SetText("")
+    -- 空壳必须先设字体再 SetText：这个 HD 客户端的引擎对没有字体的字体串
+    -- 调 SetText 会直接报 "Font not set"（20261008 定位：GSL 缺席时这里炸过，
+    -- 错误把当轮 ApplyAll 中断在 clientGS，模型交互等排在后面的组件整场
+    -- 没装上）。字体照抄 GearScoreLite 自己的写法；SetFont 万一失败就不
+    -- SetText —— 空壳只要存在就能防住那条 GetText 链路的 nil 索引，
+    -- 宁缺文本也不能再报错。
+    local function makeStub(name)
+        if Name2Frame(name) then return end
+        local fs = pdf:CreateFontString(name)
+        local ok, res = pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", 10)
+        if ok and res ~= false then fs:SetText("") end
         fs:Hide()
     end
-    if not Name2Frame("GearScore2") then
-        local fs = pdf:CreateFontString("GearScore2")
-        fs:SetText("")
-        fs:Hide()
-    end
+
+    makeStub("PersonalGearScore")
+    makeStub("GearScore2")
 end
 
 local function ApplyClientGS()
@@ -1516,35 +1529,53 @@ end
 -- 统一施加
 --------------------------------------------------------------------------
 
+-- 逐组件隔离：单个组件出错只记一笔，不再连坐后面的组件。
+-- 20261008 教训：GSL 缺席时 GS 空壳的 SetText 报 "Font not set"，错误从 clientGS
+-- 冲出 ApplyAll，排在后面的模型交互安装等整轮全都没跑 —— 表现就是"停用
+-- GearScoreLite 后模型不能转"。错误仍交给错误处理器（BugSack 会记录，附组件名），
+-- 只是不再中断施加流程。
+local function RunComponent(name, func)
+    local ok, err = pcall(func)
+    if not ok then
+        local hasHandler, handler = pcall(geterrorhandler)
+        if hasHandler and type(handler) == "function" then
+            pcall(handler, format("[CharPanelFix] 组件 %s 出错（其余组件照常施加）：%s",
+                tostring(name), tostring(err)))
+        end
+    end
+end
+
 local function ApplyAll()
     DB()
 
-    if db.sidebar then ApplySidebar() end
-    if db.clientGS then ApplyClientGS() end
-    if db.selfGS then ApplySelfGS() end
-    if db.clientStatPanels then ApplyClientStatPanels() end
-    if db.clientTitles then ApplyClientTitles() end
-    if db.clientToggleButtons then ApplyClientToggleButtons() end
-    if db.tabAnchor then ApplyTabAnchor() end
-    if db.textFit then ApplyTextFit() end
-    if db.model then ApplyModel() end
+    if db.sidebar then RunComponent("sidebar", ApplySidebar) end
+    if db.clientGS then RunComponent("clientGS", ApplyClientGS) end
+    if db.selfGS then RunComponent("selfGS", ApplySelfGS) end
+    if db.clientStatPanels then RunComponent("clientStatPanels", ApplyClientStatPanels) end
+    if db.clientTitles then RunComponent("clientTitles", ApplyClientTitles) end
+    if db.clientToggleButtons then RunComponent("clientToggleButtons", ApplyClientToggleButtons) end
+    if db.tabAnchor then RunComponent("tabAnchor", ApplyTabAnchor) end
+    if db.textFit then RunComponent("textFit", ApplyTextFit) end
+    if db.model then RunComponent("model", ApplyModel) end
 
     if db.itemLevel then
-        if ApplyItemLevel() then
-            -- 接管成功后立刻重画一次属性面板
-            local m = GetCharModule()
-            if m and m.PaperDollFrame_UpdateStats then pcall(m.PaperDollFrame_UpdateStats, m) end
-        end
-        EnsureItemLevelExpanded()
+        RunComponent("itemLevel", function()
+            if ApplyItemLevel() then
+                -- 接管成功后立刻重画一次属性面板
+                local m = GetCharModule()
+                if m and m.PaperDollFrame_UpdateStats then pcall(m.PaperDollFrame_UpdateStats, m) end
+            end
+        end)
+        RunComponent("itemLevelExpand", EnsureItemLevelExpanded)
     end
 
-    if db.enhancedGeometry then ApplyEnhancedGeometry() end
-    if db.modelFeatures then ApplyModelFeatures() end
+    if db.enhancedGeometry then RunComponent("enhancedGeometry", ApplyEnhancedGeometry) end
+    if db.modelFeatures then RunComponent("modelFeatures", ApplyModelFeatures) end
     -- 无条件调用：关掉组件时要能把装上去的脚本卸掉
-    ApplyModelControls()
+    RunComponent("modelControls", ApplyModelControls)
     -- 无条件调用：关掉这个组件时要能把它建出来的贴图收回去
-    ApplyClientPanelArt()
-    if db.fonts then ApplyFonts() end
+    RunComponent("clientPanelArt", ApplyClientPanelArt)
+    if db.fonts then RunComponent("fonts", ApplyFonts) end
 end
 
 -- 种族背景是即时生效的，所以只需要提一句；模型交互由 modelControls 自己装，
@@ -1602,6 +1633,9 @@ f:SetScript("OnUpdate", function(self, dt)
     if d.enhancedGeometry then FixAllCategoriesNow() end
     -- 模型只补一次，SetUnit 会重置朝向，不能每轮都调（ApplyModel 内部有判断）
     if d.model then ApplyModel() end
+    -- 模型交互：已装时只是重抬槽位（幂等）；哪一轮没装上，面板开着最迟 1 秒
+    -- 由这里补上（20261008：曾因 clientGS 报错整场没装上，只能靠 /cpfix reload）
+    if d.modelControls then ApplyModelControls() end
 end)
 
 --------------------------------------------------------------------------
