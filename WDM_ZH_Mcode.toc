@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: WDM 中文交通提示
+## Notes: 将 WDM 世界地图中的船只和飞艇目的地提示显示为中文。
+## Version: 1.0.0
+## Author: MuyuQ
+## OptionalDeps: WDM
+
+WDM_ZH_Mcode.lua
