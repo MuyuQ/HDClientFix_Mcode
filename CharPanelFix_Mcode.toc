@@ -1,8 +1,8 @@
 ## Interface: 30300
 ## Title: CharPanelFix_Mcode |cff33ff99角色面板修复|r
-## Notes: 修复 HD 客户端角色/属性面板的文字重叠与错位：属性/称号侧栏互斥、人物模型与装备槽位、装等显示统一、属性行距、底部标签行跟随窗口、公会页/地下城查找器文本截断（仅 ElvUI 在场时）。面板类组件仅当 ElvUI_Enhanced 在场时生效。命令 /cpfix 查看状态与开关
+## Notes: 修复 HD 客户端角色/属性面板的文字重叠与错位：属性/称号侧栏互斥、人物模型与装备槽位、装等显示统一、属性行距、底部标签行跟随窗口、公会页/地下城查找器文本截断，并补上试衣间左键拖转（仅 ElvUI 在场时）。角色面板接管仅当 ElvUI_Enhanced 在场时生效。命令 /cpfix 查看状态与开关
 ## Author: Mcode
-## Version: 1.9.1
+## Version: 1.9.2
 ## SavedVariables: Mcode_CharPanelFixDB
 ## DefaultState: Enabled
 ## X-Category: 界面

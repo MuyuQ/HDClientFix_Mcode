@@ -83,6 +83,8 @@
           最迟 1 秒自愈。
     v1.9.1：周期重施同样隔离各组件错误；空壳检查实际字体、回退 GameFontNormal，
           字体及文本有效后才公开。暂时无法初始化时保留隐藏对象供下一轮重试。
+    v1.9.2：新增独立 dressUpControls，给 ElvUI 试衣间补左键拖转，保留原旋转按钮。
+          已有鼠标处理或 Enhanced 模型交互时让位；关闭后恢复本组件仍持有的脚本。
 
 ----------------------------------------------------------------------------]]
 
@@ -126,6 +128,8 @@ local DEFAULTS = {
     -- 模型交互：滚轮缩放 + 左键拖动旋转（+ 右键拖动平移）。
     -- 装的是客户端 UIParent.lua 自己那套 Model_*S 函数，手感与原版一致，立刻生效
     modelControls         = true,
+    -- 试衣间左键拖转：只看 ElvUI 是否在场，不依赖 Enhanced 角色模块。
+    dressUpControls       = true,
     -- 按种族的模型背景（E.db.enhanced.character.characterBackground）。
     -- 即时生效；只应用一次，之后你在 ElvUI 选项里关掉不会被覆盖
     modelFeatures         = true,
@@ -889,6 +893,94 @@ ApplyModelControls = function()
 end
 
 --------------------------------------------------------------------------
+-- 组件：试衣间左键拖转，保留原生旋转按钮与其他插件的交互
+--------------------------------------------------------------------------
+
+local function RemoveDressUpControls()
+    local state = ns.dressUpControlsState
+    if not state then return end
+    state.active, state.dragging, state.cursor = false, false, nil
+    local owned = true
+    for event, handler in pairs(state.handlers) do
+        if state.model:GetScript(event) ~= handler then owned = false end
+    end
+    for event, handler in pairs(state.handlers) do
+        if state.model:GetScript(event) == handler then
+            state.model:SetScript(event, state.original[event])
+        end
+    end
+    -- 后装的插件可能仍引用我们的包装函数；停用状态使它只转发原脚本。
+    -- 它已接管脚本时，不恢复旧的鼠标开关，以免关闭新插件所需的输入。
+    if owned then state.model:EnableMouse(state.mouseEnabled) end
+    ns.dressUpControlsState = nil
+end
+
+local function ApplyDressUpControls()
+    local E = GetE()
+    local enhanced = E and E.private and E.private.enhanced
+    local otherOwner = enhanced and enhanced.character and enhanced.character.modelFrames
+    if not DB().dressUpControls or not E or otherOwner then
+        RemoveDressUpControls()
+        return
+    end
+    local model = G.DressUpModel
+    local state = ns.dressUpControlsState
+    if state then
+        if state.model == model then
+            local owned = true
+            for event, handler in pairs(state.handlers) do
+                if model:GetScript(event) ~= handler then owned = false end
+            end
+            if owned then return end
+        end
+        RemoveDressUpControls()
+    end
+    if not model or type(model.GetScript) ~= "function"
+        or type(model.IsMouseEnabled) ~= "function" or type(model.SetRotation) ~= "function"
+        or type(G.GetCursorPosition) ~= "function" then return end
+    -- 已有拖动/平移实现时保留其所有权，不按组件重施覆盖它。
+    if model:GetScript("OnMouseDown") or model:GetScript("OnMouseUp") then return end
+
+    state = { model = model, active = true, original = {}, handlers = {},
+              mouseEnabled = model:IsMouseEnabled() }
+    for _, event in ipairs({ "OnMouseDown", "OnMouseUp", "OnUpdate", "OnHide" }) do
+        state.original[event] = model:GetScript(event)
+    end
+    state.handlers.OnMouseDown = function(_, button)
+        if state.active and button == "LeftButton" then
+            state.dragging = true
+            state.cursor = G.GetCursorPosition()
+        end
+    end
+    state.handlers.OnMouseUp = function(_, button)
+        if button == "LeftButton" then state.dragging, state.cursor = false, nil end
+    end
+    state.handlers.OnUpdate = function(self, dt)
+        if state.original.OnUpdate then state.original.OnUpdate(self, dt) end
+        if not state.active or not state.dragging then return end
+        if G.IsMouseButtonDown and not G.IsMouseButtonDown("LeftButton") then
+            state.dragging, state.cursor = false, nil
+            return
+        end
+        local x = G.GetCursorPosition()
+        local rotation = self.rotation
+        if type(rotation) ~= "number" and self.GetFacing then rotation = self:GetFacing() end
+        if type(rotation) == "number" and type(x) == "number" and state.cursor then
+            self.rotation = (rotation + (x - state.cursor) * 0.01) % (2 * math.pi)
+            self:SetRotation(self.rotation)
+        end
+        state.cursor = x
+    end
+    state.handlers.OnHide = function(self, ...)
+        state.dragging, state.cursor = false, nil
+        if state.original.OnHide then state.original.OnHide(self, ...) end
+    end
+    model:EnableMouse(true)
+    for event, handler in pairs(state.handlers) do model:SetScript(event, handler) end
+    ns.dressUpControlsState = state
+end
+
+--------------------------------------------------------------------------
 -- 组件：模型种族背景（ElvUI_Enhanced 的功能，默认关闭）
 --------------------------------------------------------------------------
 
@@ -1582,6 +1674,7 @@ local function ApplyAll()
     if db.modelFeatures then RunComponent("modelFeatures", ApplyModelFeatures) end
     -- 无条件调用：关掉组件时要能把装上去的脚本卸掉
     RunComponent("modelControls", ApplyModelControls)
+    RunComponent("dressUpControls", ApplyDressUpControls)
     -- 无条件调用：关掉这个组件时要能把它建出来的贴图收回去
     RunComponent("clientPanelArt", ApplyClientPanelArt)
     if db.fonts then RunComponent("fonts", ApplyFonts) end
@@ -1629,6 +1722,11 @@ f:SetScript("OnUpdate", function(self, dt)
     if elapsed < TUNING.reapplyInterval then return end
     elapsed = 0
 
+    -- 试衣间独立于 PaperDollFrame；只开试衣间时也能补装或让位。
+    local dress = G.DressUpModel
+    if ns.dressUpControlsState or (dress and dress.IsShown and dress:IsShown()) then
+        RunComponent("dressUpControls", ApplyDressUpControls)
+    end
     local pdf = G.PaperDollFrame
     if not (pdf and pdf.IsShown and pdf:IsShown()) then return end
 
