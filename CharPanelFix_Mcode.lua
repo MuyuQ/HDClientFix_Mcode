@@ -85,6 +85,18 @@
           字体及文本有效后才公开。暂时无法初始化时保留隐藏对象供下一轮重试。
     v1.9.2：新增独立 dressUpControls，给 ElvUI 试衣间补左键拖转，保留原旋转按钮。
           已有鼠标处理或 Enhanced 模型交互时让位；关闭后恢复本组件仍持有的脚本。
+    v1.9.3：① 新增 enhancedEnable —— ElvUI_Enhanced 的"角色面板"模块开关是逐角色
+          私密设置，出厂默认 false（Settings/Private.lua 的 V.enhanced.character.enable）。
+          老角色的私密档案里存着显式 true，一切正常；新角色首次登录拿到自己的空
+          档案 → 模块 Initialize 开头直接早退，整套面板增强缺席：右侧属性栏空白、
+          没有展开小箭头、没有三个侧栏标签、装备管理图标反而露在外面、两个人物
+          模型叠影、"GearScore" 标签孤立（20261013 新角色截图实证）。本组件在
+          档案没有显式值时补 true；显式 false（用户自己关的）尊重不碰。② 门控同步
+          收紧：CharModuleActive 连 enable 一起检查，开关为假时整体 stand down
+          （此前模块对象在就算"在场"，照常藏客户端面板 = 只藏不建 = 右侧空白）。
+          ③ GS 数字/标签在算不出分（score ≤ 0，新角色的常态）时整组隐藏 ——
+          GearScoreLite 自己会把 0 染成近乎不可见的深灰，面板上只剩一个孤零零的
+          "GearScore" 标签。
 
 ----------------------------------------------------------------------------]]
 
@@ -157,6 +169,10 @@ local DEFAULTS = {
     -- 的算分门控 CanInspect("mouseover") 对自己不成立（自己不可被观察），
     -- 自己的 GS 行永远缺失。仅当 GearScoreLite 在场时生效（v1.7）
     selfGS                = true,
+    -- 新角色自动补开 ElvUI_Enhanced 的"角色面板"模块：该开关是逐角色私密设置，
+    -- 出厂默认关闭，新角色自己的空档案会让整个面板增强缺席（详见文件头 v1.9.3）。
+    -- 只在档案没有显式值时补；用户显式关掉的（false）不碰
+    enhancedEnable        = true,
 }
 
 local TUNING = {
@@ -248,19 +264,29 @@ local function GetCharModule()
     return nil
 end
 
--- 隐藏/接管类组件的门控：只在 ElvUI_Enhanced 的角色模块在场时执行。
+-- 隐藏/接管类组件的门控：只在 ElvUI_Enhanced 的角色模块"真的在干活"时执行。
 --
 -- 为什么用模块对象而不是 GetE() 判断：本插件的存在理由是抵消 ElvUI_Enhanced 对
 -- 这个 HD 客户端原版面板的破坏（侧栏互斥、OnEvent 被替换、属性行几何……）。
 -- 模块不在场 —— 没装 ElvUI、ElvUI 被禁用、或只装了核心没装 Enhanced —— 时，
 -- 原版面板并没有被破坏，反而是唯一能用的面板；此时照常执行隐藏类组件会把
 -- 原版正在用的东西藏掉（属性区整个空白、称号/公会文字消失、装等读数消失）。
--- 模块对象本身就是"Enhanced 真的在干活"的凭证，拿不到就整体 stand down。
+--
+-- v1.9.3 收紧：模块对象存在 ≠ 模块在干活。ElvUI_Enhanced 的角色模块还有一个
+-- 逐角色开关 E.private.enhanced.character.enable（私密设置，出厂默认 false，
+-- 详见文件头 v1.9.3），enable 为假时它的 Initialize 在开头直接早退 —— 属性
+-- 面板、展开按钮、侧栏标签全都不建。此时若照常隐藏客户端面板 = 只藏不建，
+-- 右侧就只剩一片空白（20261013 新角色实证）。所以开关缺失（nil）或为假一律
+-- 视为不在干活；enhancedEnable 组件会先把缺失的补上，下一轮（或同轮更早的
+-- 调用点）这个门控自然为真。
 --
 -- 模块比本插件晚初始化的场景：每次 ApplyAll / OnUpdate 重施都会重新评估，
 -- 模块一出现下一轮就自动生效，不需要 /reload。
 local function CharModuleActive()
-    return GetCharModule() ~= nil
+    if GetCharModule() == nil then return false end
+    local E = GetE()
+    local ch = E and E.private and E.private.enhanced and E.private.enhanced.character
+    return (ch and ch.enable) and true or false
 end
 
 -- 扫描 _G 里符合给定 Lua pattern 的 frame 名（只认真正的 UI 对象）
@@ -557,7 +583,21 @@ local function ApplyClientGS()
         return
     end
 
-    -- 在场：保持显示。v1.5 及之前它们是跟着高清块一起被藏的，Show 是幂等的，
+    -- 先算分：能不能显示取决于算不算得出分（v1.9.3 起）。
+    -- 新角色一身初始装备算出 0，GearScoreLite 自己把 0 用 (0.1,0.1,0.1) 近乎
+    -- 不可见的深灰写上 —— 面板上只剩一个孤零零的 "GearScore" 标签（截图实证）。
+    -- 算不出分就整组（数字+标签）藏起来不显示。
+    local score
+    local ok, s = pcall(G.GearScore_GetScore, UnitName("player"), "player")
+    if ok and type(s) == "number" and s > 0 then score = s end
+
+    if not score then
+        HideFrame(value)
+        HideFrame(label)
+        return
+    end
+
+    -- 有效分数：保持显示。v1.5 及之前它们是跟着高清块一起被藏的，Show 是幂等的，
     -- 也兜住"同一次登录里先被旧逻辑藏过"的情况。
     if value and not value:IsShown() then value:Show() end
     if label and not label:IsShown() then label:Show() end
@@ -570,13 +610,10 @@ local function ApplyClientGS()
     -- 它按 (R,B,G) 接、又按 (R,G,B) 传 —— 照抄这个双重交换，颜色才和它自己
     -- 刷出来的完全一样。
     if value and value.GetText then
-        local ok, score = pcall(G.GearScore_GetScore, UnitName("player"), "player")
-        if ok and type(score) == "number" and score > 0 then
-            local okQ, r, b, g = pcall(G.GearScore_GetQuality, score)
-            if okQ and r then
-                value:SetText(score)
-                value:SetTextColor(r, g, b, 1)
-            end
+        local okQ, r, b, g = pcall(G.GearScore_GetQuality, score)
+        if okQ and r then
+            value:SetText(score)
+            value:SetTextColor(r, g, b, 1)
         end
     end
 end
@@ -1627,6 +1664,105 @@ local function ApplySelfGS()
 end
 
 --------------------------------------------------------------------------
+-- 组件 10：新角色自动补开 Enhanced 角色面板模块（enhancedEnable，v1.9.3）
+--------------------------------------------------------------------------
+
+-- 现象：新建的角色（以及所有从没单独开过"角色面板"模块的角色）面板缺一整套增强：
+-- 右侧属性栏空白、左下没有展开/收起小箭头、右上没有三个侧栏切换标签、
+-- 装备管理图标反而露在外面、人物模型两个叠影、"GearScore" 标签孤零零没有数字。
+--
+-- 根因（20261013 逐层查实）：
+--   * ElvUI_Enhanced 的"角色面板"开关 E.private.enhanced.character.enable 是
+--     **逐角色私密设置**，出厂默认 false（Settings/Private.lua: V.enhanced.character.enable）。
+--   * 老角色的私密档案（ElvPrivateDB.profileKeys 映射到的共享档案，如"白羊丨骑 - BD霜语"）
+--     里存着显式 true，所以一切正常；每个新角色首次登录会拿到自己的空档案 →
+--     enable 取默认 false → 模块 Initialize 开头 `if not ...enable then return end`
+--     直接早退：属性面板/展开按钮/侧栏标签都不建、客户端原版 OnEvent 不被替换
+--     （CharacterModelFrame2 拿到单位、和本插件显示的那张模型叠成两个）、
+--     GearManagerToggleButton 不被 Kill（那个露在外面的徽章图标）。
+--   * 本插件旧门控只看模块对象在不在（对象在、只是没初始化），照常隐藏客户端
+--     面板 —— 于是右侧只剩空白。
+--
+-- 修法：本角色档案里**没有显式值**时补 enable=true（显式 false = 用户自己关的，
+-- 尊重不碰），并保证模块初始化恰好跑一次、不依赖加载顺序：
+--   * 给 module.Initialize 换一层"只真正执行一次"的壳 —— 引擎的初始化回调用
+--     的是 module:Initialize()（读表上的字段），所以壳能拦住重复调用；判断
+--     "真的初始化了"看 CharacterStatsPane（模块 Initialize 里建的；enable 为假
+--     时早退不会出现），早退不算数，开关补上后还要能再跑。
+--   * 引擎在它自己的 PLAYER_LOGIN 里才初始化各模块（RegisterModule →
+--     InitializeCallback）；本插件字母序在它前面、PLAYER_LOGIN 处理器也先跑，
+--     所以登录轮里设置 enable 引擎就能看到。万一时序异常（过了
+--     PLAYER_ENTERING_WORLD 还没初始化），这里主动补调一次；壳保证不双初始化。
+-- 效果持久：值写进档案后，以后每次登录引擎自己就会正常初始化，本组件只是兜底。
+-- 关掉本组件 = 不再自动补，已补过的值不退回（想退回在 ElvUI 选项里关该模块）。
+
+-- 直接读存档侧的开关：ElvPrivateDB.profileKeys[角色键] → ElvPrivateDB.profiles[档案键]。
+-- 返回该档案里的 enhanced.character 表（可能不存在），用来分辨：
+--   表不存在 / 没有 enable 键 = 从没设过（新角色的默认态）→ 补
+--   enable = false           = 用户显式关的 → 不碰
+local function RawEnhancedCharacter()
+    local pdb = G.ElvPrivateDB
+    local E = GetE()
+    local name = (E and E.myname) or G.UnitName("player")
+    local realm = (E and E.myrealm) or G.GetRealmName()
+    if not (pdb and name and realm) then return nil end
+    local key = pdb.profileKeys and pdb.profileKeys[name .. " - " .. realm]
+    local prof = key and pdb.profiles and pdb.profiles[key]
+    return prof and prof.enhanced and prof.enhanced.character
+end
+
+local function EnsureEnhancedModule()
+    local m = GetCharModule()
+    if not m then return false end
+
+    -- 只跑一次的壳（每个 UI 载入至多装一次）
+    if not m.__cpfixInitOnce then
+        local orig = m.Initialize
+        if type(orig) == "function" then
+            m.__cpfixInitOnce = true
+            m.Initialize = function(self, ...)
+                if ns.enhInitDone then return end
+                local r = { orig(self, ...) }
+                if G.CharacterStatsPane then ns.enhInitDone = true end
+                return unpack(r)
+            end
+        end
+    end
+
+    local raw = RawEnhancedCharacter()
+    if raw and raw.enable == false then return false end   -- 显式关：尊重
+
+    local E = GetE()
+    local live = E and E.private and E.private.enhanced and E.private.enhanced.character
+    if live and live.enable ~= true then live.enable = true end
+    -- 存档侧也写一份：运行时表与存档表若是两份拷贝，靠这里持久化（同一份则幂等）。
+    -- 档案还不存在（角色全新建档）时跳过，下轮再补。
+    if raw then raw.enable = true end
+
+    if ns.enhInitDone or G.CharacterStatsPane then
+        ns.enhInitDone = true
+        return true
+    end
+
+    -- 兜底初始化：只在 PLAYER_ENTERING_WORLD 之后。那之前引擎的初始化轮可能还没
+    -- 跑到（本插件 PLAYER_LOGIN 处理器在它前面），设置 enable 就够了；过了进入
+    -- 世界还没初始化，说明引擎那轮已经带着旧的 enable 早退过，这里手动补一次。
+    if ns.enhPastLogin then
+        pcall(m.Initialize, m)
+        local ok = G.CharacterStatsPane ~= nil
+        if ok then ns.enhInitDone = true end
+        -- 面板此刻开着：把它的 OnShow 走一遍，属性栏/展开按钮之类立即就位
+        local pdf = Name2Frame("PaperDollFrame")
+        if ok and pdf and pdf:IsShown() then
+            local handler = pdf.GetScript and pdf:GetScript("OnShow")
+            if type(handler) == "function" then pcall(handler, pdf) end
+        end
+        return ok
+    end
+    return true
+end
+
+--------------------------------------------------------------------------
 -- 统一施加
 --------------------------------------------------------------------------
 
@@ -1649,6 +1785,9 @@ end
 local function ApplyAll()
     DB()
 
+    -- 最先跑：它要把 Enhanced 角色模块开关补开，后面所有走 CharModuleActive
+    -- 门控的组件才能在同一轮里正常干活（见组件 10 头注释）
+    if db.enhancedEnable then RunComponent("enhancedEnable", EnsureEnhancedModule) end
     if db.sidebar then RunComponent("sidebar", ApplySidebar) end
     if db.clientGS then RunComponent("clientGS", ApplyClientGS) end
     if db.selfGS then RunComponent("selfGS", ApplySelfGS) end
@@ -1711,6 +1850,9 @@ f:SetScript("OnEvent", function(self, event, arg1)
         ApplyAll()
         AnnounceModelFeatures()
     else
+        -- PLAYER_ENTERING_WORLD 之后，ElvUI 引擎的模块初始化轮必然已经跑过
+        -- （它在那之前就完成了），enhancedEnable 的兜底初始化从此可以启用
+        ns.enhPastLogin = true
         ApplyAll()
     end
 end)
@@ -1732,6 +1874,7 @@ f:SetScript("OnUpdate", function(self, dt)
 
     local d = DB()
 
+    if d.enhancedEnable then RunComponent("enhancedEnable", EnsureEnhancedModule) end
     if d.sidebar then RunComponent("sidebar", EnforceSidebar) end
     if d.clientGS then RunComponent("clientGS", ApplyClientGS) end
     if d.clientStatPanels then RunComponent("clientStatPanels", ApplyClientStatPanels) end
@@ -1837,6 +1980,15 @@ local function BuildDump()
         tostring(ns.engineVia), tostring(ns.moduleVia)))
     add(format("ElvUI 引擎: %s   角色模块 Enhanced_CharacterFrame: %s",
         E and "已找到" or "未找到", m and "已找到" or "未找到"))
+    do
+        -- v1.9.3：开关的 live/档案两份值 + 模块是否真的初始化过（新角色排查入口）
+        local ch = E and E.private and E.private.enhanced and E.private.enhanced.character
+        local raw = RawEnhancedCharacter()
+        add(format("Enhanced 角色模块开关: live=%s  档案=%s  已初始化=%s",
+            tostring(ch and ch.enable),
+            raw and tostring(raw.enable) or "无（档案缺此节）",
+            tostring(G.CharacterStatsPane ~= nil)))
+    end
     add(format("几何已包装: %s   装等已接管: %s   ITEM_LEVEL 已展开: %s",
         tostring(m and m.__cpfixGeometry or false),
         tostring(m and m.__cpfixItemLevel or false),
