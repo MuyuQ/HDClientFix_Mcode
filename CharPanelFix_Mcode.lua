@@ -97,6 +97,10 @@
           ③ GS 数字/标签在算不出分（score ≤ 0，新角色的常态）时整组隐藏 ——
           GearScoreLite 自己会把 0 染成近乎不可见的深灰，面板上只剩一个孤零零的
           "GearScore" 标签。
+    v1.9.4：角色面板上的 GS 数字/标签不再显示（用户确认不需要）。v1.6~v1.9.3 的
+          "常显 + 每轮重算刷新"撤销为一律隐藏；GearScoreLite 照常写文本（只是
+          不可见），客户端读文本拼装等（PGearScore）的链路不受影响。恢复显示：
+          /cpfix off clientGS 后 /reload（回到 GearScoreLite 原样）。
 
 ----------------------------------------------------------------------------]]
 
@@ -121,8 +125,8 @@ local DEFAULTS = {
     sidebarDefaultToStats = true,
 
     -- 客户端烤在 MPQ 里的高清装备等级块：GearScore2_B(重复的"物品等级"标签)。
-    -- v1.6 起 GearScoreLite 的 GS 数字/标签（PersonalGearScore / GearScore2）
-    -- 不再跟着隐藏：它在场时常显 + 每轮刷新，不在场时仍是隐藏空壳
+    -- GearScoreLite 的 GS 数字/标签（PersonalGearScore / GearScore2）自 v1.9.4 起
+    -- 面板上一律不再显示（用户确认不需要）；对象保留给客户端读文本的链路
     clientGS              = true,
     -- 让装备等级只由一个来源显示：接管 ElvUI_Enhanced 的 ItemLevel 行，填真实
     -- 平均装等（v1.6 起只保留整数；v1.8 起按实际件数平均，Warmane 玩家口径），
@@ -567,55 +571,17 @@ local function ApplyClientGS()
     -- 两个组件必须各管各的，否则 /cpfix off 做二分时结果会是假的。
     HideFrame(Name2Frame(GS_NAMES[1]))
 
-    -- v1.6：GS 数字/标签是否常显，取决于 GearScoreLite 本体是否在场（看它的
-    -- 全局函数，不看字体串 —— 字体串可能是上面补的空壳）。本插件在字母序上先于
-    -- GearScoreLite 加载，ADDON_LOADED 那轮它还没到场、只能拿到空壳；PLAYER_LOGIN
-    -- 之后它一定在，面板 OnShow 和每秒重施也都会重新走到这里。
-    local gsActive = (type(G.GearScore_GetScore) == "function"
-        and type(G.GearScore_GetQuality) == "function")
-    local value = Name2Frame("PersonalGearScore")
-    local label = Name2Frame("GearScore2")
-
-    if not gsActive then
-        -- GearScoreLite 缺席：两个名字都是隐藏空壳，HideFrame 幂等
-        HideFrame(value)
-        HideFrame(label)
-        return
-    end
-
-    -- 先算分：能不能显示取决于算不算得出分（v1.9.3 起）。
-    -- 新角色一身初始装备算出 0，GearScoreLite 自己把 0 用 (0.1,0.1,0.1) 近乎
-    -- 不可见的深灰写上 —— 面板上只剩一个孤零零的 "GearScore" 标签（截图实证）。
-    -- 算不出分就整组（数字+标签）藏起来不显示。
-    local score
-    local ok, s = pcall(G.GearScore_GetScore, UnitName("player"), "player")
-    if ok and type(s) == "number" and s > 0 then score = s end
-
-    if not score then
-        HideFrame(value)
-        HideFrame(label)
-        return
-    end
-
-    -- 有效分数：保持显示。v1.5 及之前它们是跟着高清块一起被藏的，Show 是幂等的，
-    -- 也兜住"同一次登录里先被旧逻辑藏过"的情况。
-    if value and not value:IsShown() then value:Show() end
-    if label and not label:IsShown() then label:Show() end
-
-    -- 数值每轮刷新。GearScoreLite 自己只在面板 OnShow / PLAYER_EQUIPMENT_CHANGED
-    -- 时更新，且战斗中跳过（MyPaperDoll 有 GS_PlayerIsInCombat 判定）——
-    -- 面板开着进战斗、战斗里换装，数字就会停在旧值。这里每轮重算一次：
-    -- GearScore_GetScore 只读本地装备数据，没有服务器请求，战斗中照样准确。
-    -- 消参与 GearScoreLite 的 MyPaperDoll 逐字一致：GetQuality 返回 (R,G,B)，
-    -- 它按 (R,B,G) 接、又按 (R,G,B) 传 —— 照抄这个双重交换，颜色才和它自己
-    -- 刷出来的完全一样。
-    if value and value.GetText then
-        local okQ, r, b, g = pcall(G.GearScore_GetQuality, score)
-        if okQ and r then
-            value:SetText(score)
-            value:SetTextColor(r, g, b, 1)
-        end
-    end
+    -- v1.9.4（用户要求）：面板上的 GS 数字/标签不再显示 —— 一律隐藏。
+    -- v1.6~v1.9.3 曾让这两个串（PersonalGearScore / GearScore2）"常显 + 每轮重算
+    -- 刷新"，但实际呈现经常是：数字被 3D 模型盖住、或 0 分被 GSL 自己染成近乎
+    -- 不可见的深灰 (0.1,0.1,0.1)，面板上往往只剩一个孤零零的 "GearScore" 标签
+    -- （20261013 用户截图确认这里不需要）。现在统一隐藏；GearScoreLite 自己的
+    -- OnShow / 换装刷新照常写文本（只是不可见），客户端读 PersonalGearScore 文本
+    -- 拼装等（PGearScore）的链路不受影响；空壳路径与在场路径动作一致，HideFrame
+    -- 幂等（含每秒重施、GSL 若重新 Show 也会被下一轮压回去）。
+    -- 想恢复显示：/cpfix off clientGS 后 /reload（回到 GearScoreLite 原样）。
+    HideFrame(Name2Frame("PersonalGearScore"))
+    HideFrame(Name2Frame("GearScore2"))
 end
 
 local function ApplyClientStatPanels()
