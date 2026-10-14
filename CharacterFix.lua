@@ -104,7 +104,7 @@
 
 ----------------------------------------------------------------------------]]
 
--- HDClientFix_Mcode 2.0.1: preserved character repair implementation and history.
+-- HDClientFix_Mcode 2.0.2: preserved character repair implementation and history.
 local ADDON, ns = ...
 ns = ns or {}
 

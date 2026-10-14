@@ -1,4 +1,4 @@
--- HDClientFix_Mcode 2.0.1; original 19 WDM translations by MuyuQ.
+-- HDClientFix_Mcode 2.0.2; original 19 WDM translations by MuyuQ.
 local ADDON, ns = ...
 ns = ns or {}
 local M = { installed = false }

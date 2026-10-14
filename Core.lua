@@ -1,7 +1,7 @@
--- HDClientFix_Mcode 2.0.1; character fixes by Mcode, WDM translation by MuyuQ.
+-- HDClientFix_Mcode 2.0.2; character fixes by Mcode, WDM translation by MuyuQ.
 local ADDON, ns = ...
 HDClientFix_Mcode = ns
-ns.version = "2.0.1"
+ns.version = "2.0.2"
 
 local function copy(value)
     if type(value) ~= "table" then return value end
@@ -23,7 +23,10 @@ function ns.Initialize()
         if db.character[key] == nil then db.character[key] = value end
     end
     db.schema = 1
-    Mcode_CharPanelFixDB = nil
+    -- A still-loaded legacy addon owns this table until the next clean restart.
+    if not (ns.OldAddonConflict and ns.OldAddonConflict("CharPanelFix_Mcode")) then
+        Mcode_CharPanelFixDB = nil
+    end
     HDClientFix_McodeCharacterDB = type(HDClientFix_McodeCharacterDB) == "table"
         and HDClientFix_McodeCharacterDB or {}
     local role = HDClientFix_McodeCharacterDB
