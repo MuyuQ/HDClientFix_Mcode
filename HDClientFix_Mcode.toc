@@ -2,7 +2,7 @@
 ## Title: |cff33ff99Mcode|r HD 客户端修复
 ## Notes: 角色面板、试衣间与文字显示修复，WDM 船只和飞艇目的地汉化。/hdfix 打开设置；各项功能独立开关。
 ## Author: Mcode, MuyuQ
-## Version: 2.0.0
+## Version: 2.0.1
 ## SavedVariables: HDClientFix_McodeDB, Mcode_CharPanelFixDB
 ## SavedVariablesPerCharacter: HDClientFix_McodeCharacterDB
 ## OptionalDeps: ElvUI, ElvUI_Enhanced, WDM, GearScoreLite

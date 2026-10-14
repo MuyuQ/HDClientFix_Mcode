@@ -16,7 +16,7 @@ local groups = {
         { "clientTitles", "修复称号与公会名字重叠", "关闭后需 /reload 完全恢复。" },
         { "clientTitleWidgets", "显示客户端原称号控件", "默认关闭；关闭后需 /reload 完全恢复。" },
         { "enhancedGeometry", "调整属性行距与物品等级字号", "关闭后需 /reload 完全恢复。" },
-        { "tabAnchor", "修复底部标签行的位置", "关闭后需 /reload 完全恢复。" },
+        { "tabAnchor", "修复底部标签行的位置", "需要 ElvUI 角色窗口底框；关闭后需 /reload 完全恢复。", "backdrop" },
     } },
     { title = "其他窗口与提示", help = "各项依赖分别标注，不要求全部安装 ElvUI_Enhanced。", items = {
         { "textFit", "修复公会页与地下城查找器文字截断", "需要 ElvUI；关闭后需 /reload 完全恢复。", "elvui" },
@@ -41,11 +41,15 @@ local function available(dependency)
     if ns.characterConflict then return "旧 CharPanelFix_Mcode 仍在运行，请移出旧目录后重启", false end
     if dependency == "elvui" then return "需要 ElvUI", ns.HasElvUI and ns.HasElvUI() end
     if dependency == "enhanced" then return "需要 ElvUI_Enhanced 角色面板模块", ns.HasEnhanced and ns.HasEnhanced() end
+    if dependency == "backdrop" then
+        return "需要 ElvUI 角色窗口底框", ns.HasElvUI and ns.HasElvUI()
+            and CharacterFrame and CharacterFrame.backdrop and CharacterFrameTab1 ~= nil
+    end
     if dependency == "gsl" then
         return "需要 GearScoreLite", type(GearScore_GetScore) == "function" and type(GearScore_GetQuality) == "function"
     end
     if dependency == "lsm" then
-        return "需要 LibSharedMedia-3.0", LibStub and LibStub("LibSharedMedia-3.0", true) ~= nil
+        return "需要 LibSharedMedia-3.0", ns.HasFontLibrary and ns.HasFontLibrary()
     end
     return ns.CharacterStatus()
 end
@@ -82,6 +86,11 @@ local function register()
             rows[#rows + 1] = row
             local help = paragraph(item[3], "GameFontHighlightSmall", 10); help.indent = 26
             box:SetScript("OnClick", function(self)
+                if type(InCombatLockdown) == "function" and InCombatLockdown() then
+                    self:SetChecked(key == "transport" and ns.TransportEnabled()
+                        or key ~= "transport" and ns.GetCharacterDB()[key] == true)
+                    ns.Print("战斗结束后再修改修复选项。"); return
+                end
                 local value = self:GetChecked() and true or false
                 if key == "transport" then ns.SetTransport(value)
                 else ns.CharacterSet(key, value) end
@@ -110,7 +119,8 @@ local function register()
             item.box:SetChecked(item.key == "transport" and ns.TransportEnabled()
                 or item.key ~= "transport" and ns.GetCharacterDB()[item.key] == true)
             local _, ready = available(item.dependency)
-            if ready then item.box:Enable() else item.box:Disable() end
+            local combat = type(InCombatLockdown) == "function" and InCombatLockdown()
+            if ready and not combat then item.box:Enable() else item.box:Disable() end
         end
         for _, row in ipairs(statusRows) do
             local message = available(row.dependency)

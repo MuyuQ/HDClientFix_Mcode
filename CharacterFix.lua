@@ -104,7 +104,7 @@
 
 ----------------------------------------------------------------------------]]
 
--- HDClientFix_Mcode 2.0.0: preserved character repair implementation and history.
+-- HDClientFix_Mcode 2.0.1: preserved character repair implementation and history.
 local ADDON, ns = ...
 ns = ns or {}
 
@@ -882,7 +882,7 @@ ApplyModelControls = function()
     RaiseSlotsAboveModel(model)
 
     if model.__cpfixControls then
-        ns.modelControlsOwner = "CharPanelFix_Mcode"
+        ns.modelControlsOwner = "HDClientFix_Mcode"
         ns.modelControlsFrame = model
         return
     end
@@ -902,7 +902,7 @@ ApplyModelControls = function()
     G.Model_OnLoadS(model)
 
     model.__cpfixControls = true
-    ns.modelControlsOwner = "CharPanelFix_Mcode"
+    ns.modelControlsOwner = "HDClientFix_Mcode"
     ns.modelControlsFrame = model
 end
 
@@ -1952,7 +1952,7 @@ local function BuildDump()
     local E = GetE()
     local m = GetCharModule()
 
-    add("===== CharPanelFix_Mcode 自检 =====")
+    add("===== HDClientFix_Mcode 自检 =====")
     add(format("引擎获取方式: %s   角色模块获取方式: %s",
         tostring(ns.engineVia), tostring(ns.moduleVia)))
     add(format("ElvUI 引擎: %s   角色模块 Enhanced_CharacterFrame: %s",
@@ -2361,3 +2361,7 @@ ns.CharacterStatus = function()
 end
 ns.HasElvUI = function() return GetE() ~= nil end
 ns.HasEnhanced = function() return GetCharModule() ~= nil end
+ns.HasFontLibrary = function()
+    local E = GetE()
+    return (E and E.LSM) ~= nil or (G.LibStub and G.LibStub("LibSharedMedia-3.0", true) ~= nil)
+end
