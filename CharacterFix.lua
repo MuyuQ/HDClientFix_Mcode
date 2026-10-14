@@ -104,15 +104,22 @@
 
 ----------------------------------------------------------------------------]]
 
+-- HDClientFix_Mcode 2.0.0: preserved character repair implementation and history.
 local ADDON, ns = ...
 ns = ns or {}
+
+-- Old standalone copies must not install a second set of panel hooks.
+if ns.OldAddonConflict and ns.OldAddonConflict("CharPanelFix_Mcode") then
+    ns.characterConflict = true
+    return
+end
 
 local G = _G
 local type, pairs, tostring, tonumber = type, pairs, tostring, tonumber
 local format, strfind, strmatch, gsub = string.format, string.find, string.match, string.gsub
 local tinsert = table.insert
 
-local TAG = "|cff33ff99[CPFix]|r "
+local TAG = "|cff33ff99[HD 客户端修复]|r "
 
 --------------------------------------------------------------------------
 -- 配置
@@ -206,6 +213,10 @@ local PANE_NAMES = {
 
 local db
 local function DB()
+    if ns.GetCharacterDB then
+        db = ns.GetCharacterDB()
+        return db
+    end
     if type(Mcode_CharPanelFixDB) ~= "table" then Mcode_CharPanelFixDB = {} end
     db = Mcode_CharPanelFixDB
     for k, v in pairs(DEFAULTS) do
@@ -1742,7 +1753,7 @@ local function RunComponent(name, func)
     if not ok then
         local hasHandler, handler = pcall(geterrorhandler)
         if hasHandler and type(handler) == "function" then
-            pcall(handler, format("[CharPanelFix] 组件 %s 出错（其余组件照常施加）：%s",
+            pcall(handler, format("[HDClientFix] 组件 %s 出错（其余组件照常施加）：%s",
                 tostring(name), tostring(err)))
         end
     end
@@ -2246,7 +2257,7 @@ local function ShowDump()
 
         local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("TOP", 0, -14)
-        title:SetText("CharPanelFix_Mcode 自检输出 —— 点进框里 Ctrl+A 再 Ctrl+C 复制")
+        title:SetText("HDClientFix_Mcode 自检输出 —— 点进框里 Ctrl+A 再 Ctrl+C 复制")
 
         local scroll = CreateFrame("ScrollFrame", "McodeCharPanelFixDumpScroll", box, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 16, -36)
@@ -2337,3 +2348,16 @@ SlashCmdList["MCODECHARPANELFIX"] = function(input)
         PrintHelp()
     end
 end
+
+-- Shared settings use the existing component setters and dependency gates.
+ns.CharacterDefaults = DEFAULTS
+ns.CharacterSet = SetComponent
+ns.CharacterApply = ApplyAll
+ns.CharacterStatus = function()
+    if not GetE() then return "未加载 ElvUI", false end
+    if not GetCharModule() then return "未加载 ElvUI_Enhanced 角色面板模块", false end
+    if not CharModuleActive() then return "ElvUI_Enhanced 角色面板模块未启用", false end
+    return "依赖已就绪；按各项开关执行", true
+end
+ns.HasElvUI = function() return GetE() ~= nil end
+ns.HasEnhanced = function() return GetCharModule() ~= nil end

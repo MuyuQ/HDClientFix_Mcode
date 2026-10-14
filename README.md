@@ -1,6 +1,12 @@
-# CharPanelFix_Mcode —— 角色面板修复
+# Mcode HD 客户端修复
 
-修复本 HD 客户端与 ElvUI / ElvUI_Enhanced 叠加后的角色属性文字重叠、装等显示、底部标签错位、公会与地下城查找器文本截断等问题，并补上试衣间左键拖动旋转；多数修复项默认开启。试衣间组件为 `dressUpControls`，保留原旋转按钮并在已有鼠标处理或 Enhanced 模型交互时让位。
+HDClientFix_Mcode 2.0.0 合并 CharPanelFix_Mcode 的角色与窗口修复，以及 WDM_ZH_Mcode 的 19 种地图交通提示汉化。
+角色面板修复作者 Mcode；地图提示汉化作者 MuyuQ。感谢提供截图和实测反馈的玩家。
 
-- 用户向完整说明：`doc/玩家/角色面板修复说明.md`（交付副本为插件目录内 README.md）。
-- **维护真源**：本目录（`src/addons/CharPanelFix_Mcode`）；成品副本见 `src/addons/addons/`。
+输入 `/hdfix` 或从 ESC → 界面 → 插件打开“HD 客户端修复”，各项独立开关。
+主要角色面板修复需要 ElvUI＋ElvUI_Enhanced，并启用其角色面板模块；地图提示不依赖 ElvUI。
+试衣间和文字适配只需要 ElvUI，自己的 GS 提示依赖 GearScoreLite。
+
+首次改名安装须完全退出游戏，备份移出两个旧插件目录并迁移旧设置。
+完整玩家说明真源为工程 `doc/玩家/HD客户端修复说明.md`，成品 README 由刷新工具从真源生成。
+两个旧插件的提交历史作为本次合并提交的父历史保留，旧维护源与说明归档。
