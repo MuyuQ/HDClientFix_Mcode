@@ -1,6 +1,6 @@
 # Mcode HD 客户端修复
 
-HDClientFix_Mcode 2.0.2 合并 CharPanelFix_Mcode 的角色与窗口修复，以及 WDM_ZH_Mcode 的 19 种地图交通提示汉化。
+HDClientFix_Mcode 2.0.3 合并 CharPanelFix_Mcode 的角色与窗口修复，以及 WDM_ZH_Mcode 的 19 种地图交通提示汉化。检测到旧版插件时，聊天框分行提示一次；设置页显示受影响模块和处理方法。
 角色面板修复作者 Mcode；地图提示汉化作者 MuyuQ。感谢提供截图和实测反馈的玩家。
 
 输入 `/hdfix` 或从 ESC → 界面 → 插件打开“HD 客户端修复”，各项独立开关。

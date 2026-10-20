@@ -38,7 +38,9 @@ end
 
 local function available(dependency)
     if dependency == "map" then return ns.MapTransport.Status() end
-    if ns.characterConflict then return "旧 CharPanelFix_Mcode 仍在运行，请移出旧目录后重启", false end
+    if ns.characterConflict then
+        return "冲突：旧 CharPanelFix_Mcode 仍在运行。\n角色面板修复已暂停。\n请移出旧目录并完全重启游戏。", false
+    end
     if dependency == "elvui" then return "需要 ElvUI", ns.HasElvUI and ns.HasElvUI() end
     if dependency == "enhanced" then return "需要 ElvUI_Enhanced 角色面板模块", ns.HasEnhanced and ns.HasEnhanced() end
     if dependency == "backdrop" then
@@ -135,7 +137,7 @@ local function register()
         elapsed = elapsed + dt
         if elapsed >= 1 then elapsed = 0; self:Refresh() end
     end)
-    panel.scroll, panel.boxes = scroll, boxes
+    panel.scroll, panel.boxes, panel.statusRows = scroll, boxes, statusRows
     InterfaceOptions_AddCategory(panel); ns.options = panel
 end
 

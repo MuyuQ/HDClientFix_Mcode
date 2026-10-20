@@ -1,7 +1,7 @@
--- HDClientFix_Mcode 2.0.2; character fixes by Mcode, WDM translation by MuyuQ.
+-- HDClientFix_Mcode 2.0.3; character fixes by Mcode, WDM translation by MuyuQ.
 local ADDON, ns = ...
 HDClientFix_Mcode = ns
-ns.version = "2.0.2"
+ns.version = "2.0.3"
 
 local function copy(value)
     if type(value) ~= "table" then return value end
@@ -67,9 +67,43 @@ function ns.OldAddonConflict(name)
     return type(IsAddOnLoaded) == "function" and IsAddOnLoaded(name) == true
 end
 
+local conflictNoticeFrame = CreateFrame("Frame")
+local conflictNoticePending = false
+local reportedConflicts = {}
+ns.conflictNoticeFrame = conflictNoticeFrame
+
+function ns.ReportLegacyConflicts()
+    local newCharacter = ns.characterConflict and not reportedConflicts.character
+    local newMap = ns.mapConflict and not reportedConflicts.map
+    if not newCharacter and not newMap then return false end
+
+    if newCharacter then reportedConflicts.character = true end
+    if newMap then reportedConflicts.map = true end
+    ns.Print("检测到仍在运行的旧版插件：")
+    if newCharacter then ns.Print("角色面板修复已暂停：CharPanelFix_Mcode。") end
+    if newMap then ns.Print("地图交通汉化已暂停：WDM_ZH_Mcode。") end
+    ns.Print("处理方法：移出对应旧插件目录，然后完全退出并重启游戏。")
+    ns.Print("输入 /hdfix 查看冲突状态和受影响的选项。")
+    return true
+end
+
+function ns.ScheduleLegacyConflictNotice()
+    if not ns.playerLoggedIn or conflictNoticePending then return end
+    conflictNoticePending = true
+    conflictNoticeFrame:SetScript("OnUpdate", function(self)
+        self:SetScript("OnUpdate", nil)
+        conflictNoticePending = false
+        ns.ReportLegacyConflicts()
+    end)
+end
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_LOGIN")
 events:SetScript("OnEvent", function(_, event, name)
-    if event == "PLAYER_LOGIN" or name == ADDON then ns.Initialize() end
+    if event == "PLAYER_LOGIN" then
+        ns.playerLoggedIn = true
+        ns.Initialize()
+        ns.ScheduleLegacyConflictNotice()
+    elseif name == ADDON then ns.Initialize() end
 end)
