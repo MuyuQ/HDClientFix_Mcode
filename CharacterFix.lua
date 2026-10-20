@@ -104,7 +104,7 @@
 
 ----------------------------------------------------------------------------]]
 
--- HDClientFix_Mcode 2.0.3: preserved character repair implementation and history.
+-- HDClientFix_Mcode 2.0.4: preserved character repair implementation and history.
 local ADDON, ns = ...
 ns = ns or {}
 
@@ -212,7 +212,10 @@ local PANE_NAMES = {
 --------------------------------------------------------------------------
 
 local db
+local suspended = {}
+for key in pairs(DEFAULTS) do suspended[key] = false end
 local function DB()
+    if ns.characterConflict or ns.storageError then db = suspended; return db end
     if ns.GetCharacterDB then
         db = ns.GetCharacterDB()
         return db
@@ -298,6 +301,7 @@ end
 -- 模块比本插件晚初始化的场景：每次 ApplyAll / OnUpdate 重施都会重新评估，
 -- 模块一出现下一轮就自动生效，不需要 /reload。
 local function CharModuleActive()
+    if ns.characterConflict or ns.storageError then return false end
     if GetCharModule() == nil then return false end
     local E = GetE()
     local ch = E and E.private and E.private.enhanced and E.private.enhanced.character
@@ -823,12 +827,19 @@ local function RestoreSlotLevels()
 end
 
 local function RemoveModelControls(model)
-    if not model or not model.__cpfixControls then return end
+    local state = model and model.__cpfixControls
+    if type(state) ~= "table" then return end
+    state.active = false
+    local owned = true
+    for event, handler in pairs(state.handlers) do
+        if model:GetScript(event) == handler then model:SetScript(event, state.original[event])
+        else owned = false end
+    end
+    if owned then
+        if state.mouse ~= nil then model:EnableMouse(state.mouse) end
+        if state.wheel ~= nil then model:EnableMouseWheel(state.wheel) end
+    end
     model.__cpfixControls = nil
-    model:SetScript("OnMouseWheel", nil)
-    model:SetScript("OnMouseDown", nil)
-    model:SetScript("OnMouseUp", nil)
-    model:SetScript("OnUpdate", nil)
     RestoreSlotLevels()
     ns.modelControlsOwner = nil
 end
@@ -848,6 +859,9 @@ ApplyModelControls = function()
         return
     end
 
+    if ns.modelControlsFrame and ns.modelControlsFrame ~= model then
+        RemoveModelControls(ns.modelControlsFrame); ns.modelControlsFrame = nil
+    end
     if not model then return end
 
     -- Enhanced 不在场时，客户端 XML 自己就给 CharacterModelFrame2 装好了同一套
@@ -866,6 +880,9 @@ ApplyModelControls = function()
     local E = GetE()
     if E and E.private and E.private.enhanced and E.private.enhanced.character
         and E.private.enhanced.character.modelFrames then
+        if ns.modelControlsFrame then
+            RemoveModelControls(ns.modelControlsFrame); ns.modelControlsFrame = nil
+        end
         ns.modelControlsOwner = "ElvUI_Enhanced"
         return
     end
@@ -881,27 +898,41 @@ ApplyModelControls = function()
     -- 槽位层级每一轮都要保证（面板重建、客户端自己调 level 都可能把它压回去）
     RaiseSlotsAboveModel(model)
 
+    if ns.modelControlsYielded and ns.modelControlsYielded[model] then return end
     if model.__cpfixControls then
+        for event, handler in pairs(model.__cpfixControls.handlers) do
+            if model:GetScript(event) ~= handler then
+                RemoveModelControls(model)
+                ns.modelControlsFrame = nil; ns.modelControlsOwner = "其他插件"
+                ns.modelControlsYielded = ns.modelControlsYielded or setmetatable({}, { __mode = "k" })
+                ns.modelControlsYielded[model] = true
+                return
+            end
+        end
         ns.modelControlsOwner = "HDClientFix_Mcode"
         ns.modelControlsFrame = model
         return
     end
 
-    model:EnableMouse(true)
-    model:EnableMouseWheel(true)
-
-    -- 参数照抄客户端 XML：delta * 0.48
-    model:SetScript("OnMouseWheel", function(self, delta)
-        G.Model_OnMouseWheelS(self, delta * 0.48)
-    end)
-    model:SetScript("OnMouseDown", G.Model_OnMouseDownS)
-    model:SetScript("OnMouseUp", G.Model_OnMouseUpS)
-    model:SetScript("OnUpdate", G.Model_OnUpdateS)
-
-    -- 初始化缩放区间/默认朝向/相机位置（照抄它的 <OnLoad>）
+    local state = { active = true, original = {}, handlers = {},
+        mouse = model.IsMouseEnabled and model:IsMouseEnabled(),
+        wheel = model.IsMouseWheelEnabled and model:IsMouseWheelEnabled() }
+    local handlers = { OnMouseWheel = function(self, delta) G.Model_OnMouseWheelS(self, delta * 0.48) end,
+        OnMouseDown = G.Model_OnMouseDownS, OnMouseUp = G.Model_OnMouseUpS, OnUpdate = G.Model_OnUpdateS }
+    for event, handler in pairs(handlers) do
+        local eventName, activeHandler = event, handler
+        state.original[eventName] = model:GetScript(eventName)
+        state.handlers[eventName] = function(self, ...)
+            if state.active and DB().modelControls then return activeHandler(self, ...) end
+            local original = state.original[eventName]
+            if original then return original(self, ...) end
+        end
+    end
+    -- Initialize before publishing handlers so a failed setup leaves no partial owner.
     G.Model_OnLoadS(model)
-
-    model.__cpfixControls = true
+    model:EnableMouse(true); model:EnableMouseWheel(true)
+    for event, handler in pairs(state.handlers) do model:SetScript(event, handler) end
+    model.__cpfixControls = state
     ns.modelControlsOwner = "HDClientFix_Mcode"
     ns.modelControlsFrame = model
 end
@@ -1189,6 +1220,7 @@ local function ApplyItemLevel()
     -- 注意：PAPERDOLL_STATINFO 的闭包是 module:ItemLevel(...) 调用的，
     -- 所以直接替换 module 上的这个方法就能生效。
     m.ItemLevel = function(self, statFrame, unit)
+        if not DB().itemLevel then return orig(self, statFrame, unit) end
         if statFrame and statFrame.Label then
             local numText = ClientItemLevelText()
             if not numText then
@@ -1207,11 +1239,27 @@ local function ApplyItemLevel()
         return orig(self, statFrame, unit)
     end
 
+    ns.itemLevelState = { module = m, original = orig, wrapper = m.ItemLevel,
+        score = Name2Frame("PGearScore") }
+    local state = ns.itemLevelState
+    state.scoreShown = state.score and state.score:IsShown()
     m.__cpfixItemLevel = true
 
     -- 客户端那块大号 258 (GS: 0) 现在没用了，收掉它
     HideFrame(Name2Frame("PGearScore"))
     return true
+end
+
+local function RemoveItemLevel()
+    local state = ns.itemLevelState
+    if not state then return end
+    if state.module.ItemLevel == state.wrapper then
+        state.module.ItemLevel = state.original
+        state.module.__cpfixItemLevel = nil
+        if state.score and state.scoreShown and not DB().clientGS then state.score:Show() end
+    end
+    ns.itemLevelState = nil
+    if state.module.PaperDollFrame_UpdateStats then pcall(state.module.PaperDollFrame_UpdateStats, state.module) end
 end
 
 -- ITEM_LEVEL 分类在存档里是**折叠**的（collapsedName2.ITEM_LEVEL = true），折叠状态下
@@ -1748,9 +1796,13 @@ end
 -- 冲出 ApplyAll，排在后面的模型交互安装等整轮全都没跑 —— 表现就是"停用
 -- GearScoreLite 后模型不能转"。错误仍交给错误处理器（BugSack 会记录，附组件名），
 -- 只是不再中断施加流程。
+local componentErrors = {}
 local function RunComponent(name, func)
+    if ns.characterConflict or ns.storageError then return end
     local ok, err = pcall(func)
-    if not ok then
+    if ok then componentErrors[name] = nil
+    elseif componentErrors[name] ~= tostring(err) then
+        componentErrors[name] = tostring(err)
         local hasHandler, handler = pcall(geterrorhandler)
         if hasHandler and type(handler) == "function" then
             pcall(handler, format("[HDClientFix] 组件 %s 出错（其余组件照常施加）：%s",
@@ -1760,7 +1812,11 @@ local function RunComponent(name, func)
 end
 
 local function ApplyAll()
+    if ns.characterConflict or ns.storageError then return end
+    if type(InCombatLockdown) == "function" and InCombatLockdown() then ns.pendingApply = true; return end
+    ns.pendingApply = nil
     DB()
+    if not db.itemLevel then RemoveItemLevel() end
 
     -- 最先跑：它要把 Enhanced 角色模块开关补开，后面所有走 CharModuleActive
     -- 门控的组件才能在同一轮里正常干活（见组件 10 头注释）
@@ -1814,11 +1870,14 @@ local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
+f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:Show()        -- OnUpdate 只在可见的 frame 上跑，显式 Show 一下免得依赖默认值
 
 local elapsed = 0
 f:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" then
+    if event == "PLAYER_REGEN_ENABLED" then
+        if ns.pendingApply then ApplyAll() end
+    elseif event == "ADDON_LOADED" then
         if arg1 == ADDON then
             DB()
             ApplyAll()
@@ -1837,6 +1896,8 @@ end)
 -- 角色面板可见时轻量地周期性重施（防止客户端自己的更新流程把东西又显示出来，
 -- 也兜住"拿不到 ElvUI_Enhanced 模块"时几何修正失效的情况）
 f:SetScript("OnUpdate", function(self, dt)
+    if ns.characterConflict or ns.storageError then return end
+    if type(InCombatLockdown) == "function" and InCombatLockdown() then ns.pendingApply = true; return end
     elapsed = elapsed + dt
     if elapsed < TUNING.reapplyInterval then return end
     elapsed = 0
@@ -2310,11 +2371,14 @@ local function PrintHelp()
 end
 
 local function SetComponent(name, value)
+    if ns.characterConflict or ns.storageError then P("修复已暂停，请先处理冲突或存档版本。"); return end
+    if type(InCombatLockdown) == "function" and InCombatLockdown() then P("战斗结束后再修改修复选项。"); return end
     if DEFAULTS[name] == nil then
         P("没有这个组件：" .. tostring(name))
         return
     end
     DB()[name] = value
+    if name == "modelControls" then ns.modelControlsYielded = nil end
     if name == "modelFeatures" and value then
         -- 重新应用一次，这样改完再 /reload 就会生效；同时也清掉"已提示过"
         DB().modelFeaturesApplied = nil
@@ -2347,6 +2411,14 @@ SlashCmdList["MCODECHARPANELFIX"] = function(input)
     else
         PrintHelp()
     end
+end
+
+-- Stop future work and restore hooks that have an explicit ownership record.
+ns.SuspendCharacter = function()
+    ns.characterConflict = true
+    DB()
+    if ns.modelControlsFrame then RemoveModelControls(ns.modelControlsFrame); ns.modelControlsFrame = nil end
+    RemoveDressUpControls(); RemoveItemLevel()
 end
 
 -- Shared settings use the existing component setters and dependency gates.

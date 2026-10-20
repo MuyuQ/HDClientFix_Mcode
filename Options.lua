@@ -6,7 +6,7 @@ local groups = {
         { "sidebar", "修复属性、称号与装备管理侧栏互斥", "关闭后需 /reload 完全恢复。" },
         { "sidebarDefaultToStats", "打开角色面板时默认显示属性页", "依赖侧栏修复。" },
         { "clientGS", "隐藏角色面板的重复装等与 GS 文字", "保留 GearScoreLite 的数据处理；关闭后需 /reload 恢复。" },
-        { "itemLevel", "统一平均物品等级显示", "按实际装备件数计算，保留整数。" },
+        { "itemLevel", "统一平均物品等级显示", "按实际装备件数计算，保留整数；关闭时恢复原显示方法。" },
         { "clientStatPanels", "隐藏重复的客户端属性面板", "关闭后需 /reload 完全恢复。" },
         { "clientToggleButtons", "隐藏重复的面板切换按钮", "关闭后需 /reload 完全恢复。" },
         { "model", "修复角色模型显示", "关闭后需 /reload 完全恢复。" },
@@ -14,7 +14,7 @@ local groups = {
         { "modelFeatures", "补充角色模型的种族背景", "关闭后不再补充；已改的背景请在 ElvUI 设置中调整。" },
         { "clientPanelArt", "恢复客户端面板底图", "默认关闭；与 ElvUI 半透明面板属于不同风格。" },
         { "clientTitles", "修复称号与公会名字重叠", "关闭后需 /reload 完全恢复。" },
-        { "clientTitleWidgets", "显示客户端原称号控件", "默认关闭；关闭后需 /reload 完全恢复。" },
+        { "clientTitleWidgets", "隐藏客户端原称号控件", "默认关闭；依赖称号修复，关闭后需 /reload 完全恢复。" },
         { "enhancedGeometry", "调整属性行距与物品等级字号", "关闭后需 /reload 完全恢复。" },
         { "tabAnchor", "修复底部标签行的位置", "需要 ElvUI 角色窗口底框；关闭后需 /reload 完全恢复。", "backdrop" },
     } },
@@ -37,6 +37,7 @@ local function text(parent, value, font)
 end
 
 local function available(dependency)
+    if ns.storageError then return ns.storageError, false end
     if dependency == "map" then return ns.MapTransport.Status() end
     if ns.characterConflict then
         return "冲突：旧 CharPanelFix_Mcode 仍在运行。\n角色面板修复已暂停。\n请移出旧目录并完全重启游戏。", false

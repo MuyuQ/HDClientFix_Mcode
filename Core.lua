@@ -1,7 +1,7 @@
--- HDClientFix_Mcode 2.0.3; character fixes by Mcode, WDM translation by MuyuQ.
+-- HDClientFix_Mcode 2.0.4; character fixes by Mcode, WDM translation by MuyuQ.
 local ADDON, ns = ...
 HDClientFix_Mcode = ns
-ns.version = "2.0.3"
+ns.version = "2.0.4"
 
 local function copy(value)
     if type(value) ~= "table" then return value end
@@ -13,6 +13,14 @@ end
 function ns.Initialize()
     if ns.ready then return end
     local db = type(HDClientFix_McodeDB) == "table" and HDClientFix_McodeDB or {}
+    if tonumber(db.schema) and tonumber(db.schema) > 1 then
+        ns.storageError = "存档来自更高版本，已保留原数据；请安装对应版本。修复已暂停。"
+        local disabled = {}
+        for key in pairs(ns.CharacterDefaults or {}) do disabled[key] = false end
+        ns.db, ns.role, ns.ready = { character = disabled, map = { transport = false } }, {}, true
+        ns.Print(ns.storageError)
+        return
+    end
     HDClientFix_McodeDB = db
     if type(db.character) ~= "table" then
         db.character = type(Mcode_CharPanelFixDB) == "table" and copy(Mcode_CharPanelFixDB) or {}
@@ -54,6 +62,7 @@ end
 
 function ns.SetTransport(value)
     ns.Initialize()
+    if ns.storageError then return end
     if ns.role.transport ~= nil then ns.role.transport = value
     else ns.db.map.transport = value end
     if ns.MapTransport then ns.MapTransport.Apply() end
@@ -104,6 +113,10 @@ events:SetScript("OnEvent", function(_, event, name)
     if event == "PLAYER_LOGIN" then
         ns.playerLoggedIn = true
         ns.Initialize()
+        ns.ScheduleLegacyConflictNotice()
+    elseif name == "CharPanelFix_Mcode" and ns.OldAddonConflict(name) then
+        ns.characterConflict = true
+        if ns.SuspendCharacter then ns.SuspendCharacter() end
         ns.ScheduleLegacyConflictNotice()
     elseif name == ADDON then ns.Initialize() end
 end)
