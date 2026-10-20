@@ -104,7 +104,7 @@
 
 ----------------------------------------------------------------------------]]
 
--- HDClientFix_Mcode 2.0.4: preserved character repair implementation and history.
+-- HDClientFix_Mcode 2.0.5: preserved character repair implementation and history.
 local ADDON, ns = ...
 ns = ns or {}
 
@@ -800,6 +800,7 @@ local function RaiseSlotsAboveModel(model)
             fr.__cpfixOrigLevel = fr:GetFrameLevel()          -- 记下来，关掉时还原
         end
         fr:SetFrameLevel(level)
+        fr.__cpfixRaisedLevel = level
     end
     ns.modelSlotCount = #slots
     ns.modelSlotLevel = level
@@ -810,8 +811,8 @@ local function RestoreSlotLevels()
     if not pdf or not pdf.GetChildren then return end
     local function restore(fr)
         if fr.__cpfixOrigLevel then
-            fr:SetFrameLevel(fr.__cpfixOrigLevel)
-            fr.__cpfixOrigLevel = nil
+            if fr:GetFrameLevel() == fr.__cpfixRaisedLevel then fr:SetFrameLevel(fr.__cpfixOrigLevel) end
+            fr.__cpfixOrigLevel, fr.__cpfixRaisedLevel = nil, nil
         end
     end
     local kids = { pdf:GetChildren() }
@@ -895,9 +896,6 @@ ApplyModelControls = function()
         return
     end
 
-    -- 槽位层级每一轮都要保证（面板重建、客户端自己调 level 都可能把它压回去）
-    RaiseSlotsAboveModel(model)
-
     if ns.modelControlsYielded and ns.modelControlsYielded[model] then return end
     if model.__cpfixControls then
         for event, handler in pairs(model.__cpfixControls.handlers) do
@@ -909,6 +907,7 @@ ApplyModelControls = function()
                 return
             end
         end
+        RaiseSlotsAboveModel(model)
         ns.modelControlsOwner = "HDClientFix_Mcode"
         ns.modelControlsFrame = model
         return
@@ -933,6 +932,7 @@ ApplyModelControls = function()
     model:EnableMouse(true); model:EnableMouseWheel(true)
     for event, handler in pairs(state.handlers) do model:SetScript(event, handler) end
     model.__cpfixControls = state
+    RaiseSlotsAboveModel(model)
     ns.modelControlsOwner = "HDClientFix_Mcode"
     ns.modelControlsFrame = model
 end
