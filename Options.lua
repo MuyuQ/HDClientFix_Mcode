@@ -24,7 +24,7 @@ local groups = {
         { "selfGS", "悬停自己时补充 GS 提示", "需要 GearScoreLite；不依赖 ElvUI_Enhanced。", "gsl" },
         { "fonts", "注册 AvantGarde LT 字体兼容名称", "默认关闭；需要 LibSharedMedia-3.0，关闭后需 /reload 恢复。", "lsm" },
     } },
-    { title = "地图", help = "需要当前 HD 客户端内置的 WDM；不依赖 ElvUI。", dependency = "map", items = {
+    { title = "地图", help = "船只与飞艇提示需要客户端内置的 WDM；厄运之槌室外图导航按地图标识生效，不依赖 ElvUI。", dependency = "map", items = {
         { "transport", "汉化船只与飞艇目的地提示", "覆盖 19 种提示；即时切换，关闭后恢复原文字。", "map" },
     } },
 }
