@@ -1,4 +1,4 @@
--- HDClientFix_Mcode 2.0.6; original 19 WDM translations by MuyuQ.
+-- HDClientFix_Mcode 2.0.7; original 19 WDM translations by MuyuQ.
 local ADDON, ns = ...
 ns = ns or {}
 local M = { installed = false }
@@ -89,6 +89,5 @@ function M.Status()
         return "冲突：旧 WDM_ZH_Mcode 仍在运行。\n地图交通汉化已暂停。\n请移出旧目录并完全重启游戏。", false
     end
     if not M.installed then return "未加载 WDM 或其 AtlasPOI 模块", false end
-    local navigation = ns.MapNavigation and ns.MapNavigation.Status() or "地图导航未加载"
-    return "WDM 已就绪；覆盖 19 种船只与飞艇目的地；" .. navigation, true
+    return "WDM 已就绪；覆盖 19 种船只与飞艇目的地", true
 end

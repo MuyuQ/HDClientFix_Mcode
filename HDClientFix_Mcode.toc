@@ -1,8 +1,8 @@
 ## Interface: 30300
 ## Title: |cff33ff99Mcode|r HD 客户端修复
-## Notes: 角色面板与窗口修复、地图交通提示汉化及厄运之槌室外地图导航。/hdfix 打开设置。
+## Notes: 角色面板与窗口修复、地图交通提示汉化。/hdfix 打开设置。
 ## Author: Mcode, MuyuQ
-## Version: 2.0.6
+## Version: 2.0.7
 ## SavedVariables: HDClientFix_McodeDB, Mcode_CharPanelFixDB
 ## SavedVariablesPerCharacter: HDClientFix_McodeCharacterDB
 ## OptionalDeps: ElvUI, ElvUI_Enhanced, WDM, GearScoreLite, CharPanelFix_Mcode
@@ -11,5 +11,4 @@
 Core.lua
 CharacterFix.lua
 MapTransport.lua
-MapNavigation.lua
 Options.lua

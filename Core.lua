@@ -1,7 +1,7 @@
--- HDClientFix_Mcode 2.0.6; character fixes by Mcode, WDM translation by MuyuQ.
+-- HDClientFix_Mcode 2.0.7; character fixes by Mcode, WDM translation by MuyuQ.
 local ADDON, ns = ...
 HDClientFix_Mcode = ns
-ns.version = "2.0.6"
+ns.version = "2.0.7"
 
 local function copy(value)
     if type(value) ~= "table" then return value end
