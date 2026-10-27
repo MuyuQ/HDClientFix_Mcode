@@ -1,45 +1,39 @@
-# Mcode HD 客户端修复（HDClientFix_Mcode）
+# HDClientFix_Mcode · HD 客户端修复
 
-![客户端](https://img.shields.io/badge/WoW-3.3.5a_HD客户端-blue) ![依赖](https://img.shields.io/badge/主要面板修复-ElvUI_+_Enhanced-orange)
+![WoW 3.3.5a HD](https://img.shields.io/badge/WoW-3.3.5a_HD-blue)
 
-合并原 `CharPanelFix_Mcode` 的角色与窗口修复，以及 `WDM_ZH_Mcode` 的 19 种地图交通提示汉化；已移除厄运之槌地图导航模块，室外图缩小与右键返回由配套汉化 MPQ 提供，不再新增地区菜单项。
+为目标 3.3.5a HD 客户端修复角色面板、部分窗口文字和交互，并汉化 WDM 的地图交通提示。合并原 `CharPanelFix_Mcode` 与 `WDM_ZH_Mcode`，各项修复保留独立开关。
 
-```mermaid
-flowchart LR
-    S["HDClientFix_Mcode"] --> A["角色面板修复<br>（需要 ElvUI＋ElvUI_Enhanced）"]
-    S --> B["其他窗口与提示<br>（试衣间、文字适配、GS 提示）"]
-    S --> C["地图交通提示汉化<br>（19 种，不依赖 ElvUI）"]
-    A --> A1["装等与 GS 文字统一<br>模型交互、种族背景等 15 项开关"]
-    B --> B1["公会页与地下城查找器<br>文字适配、悬停 GS"]
-    C --> C1["Zeppelin to Brill<br>→ 前往布瑞尔的飞艇"]
-```
+[下载源码 ZIP](https://github.com/MuyuQ/HDClientFix_Mcode/archive/refs/heads/main.zip) · [详细使用说明](docs/USAGE.md) · [更新记录](CHANGELOG.md) · [反馈问题](https://github.com/MuyuQ/HDClientFix_Mcode/issues)
 
-## 打开设置
+## 功能与依赖
 
-输入 `/hdfix`，或 **ESC → 界面 → 插件 → HD 客户端修复**。一个设置页按"角色面板""其他窗口与提示""地图"分组，每项保留独立开关，没有额外总开关。
+| 模块 | 功能 | 依赖 |
+|---|---|---|
+| 角色面板 | 重复文字与按钮、装等、模型交互、背景和布局修复 | 主要功能需要 ElvUI＋ElvUI_Enhanced，并启用 Enhanced 角色面板模块 |
+| 其他窗口 | 公会页、地下城查找器文字适配，试衣间拖转 | ElvUI |
+| 自己的 GS 提示 | 悬停自己时补充 GS，已有行不重复添加 | GearScoreLite |
+| 地图交通提示 | 汉化 19 种船只、飞艇目的地提示 | 目标 HD 客户端内置 WDM 1.0.5；不依赖 ElvUI |
 
-## 安装与升级（首次改名安装）
+缺少依赖时暂停对应功能，设置页显示原因。地图贴图和厄运之槌室外图导航由配套汉化 MPQ 提供，本插件不携带这些资源。
 
-1. 完全退出游戏与启动器。
-2. 在 `Interface\AddOns\` 删除 `CharPanelFix_Mcode`、`WDM_ZH_Mcode` 和仍存在的 `Mcode_CharPanelFix` 目录，保留 WDM 本体、ElvUI 及其他依赖插件。
-3. 安装完整的 `HDClientFix_Mcode` 目录（GitHub 下载 ZIP 后把 `-main` 后缀去掉），备份后完整替换，避免残留旧文件。
-4. 完全重启游戏，启用插件并输入 `/hdfix` 检查依赖状态。
+## 安装与升级
 
-无需复制、改名或迁移旧插件存档；检测到旧插件冲突时聊天框分行提示一次，冲突只暂停对应模块。原 `/cpfix on/off/dump/reload` 命令继续可用。
+1. 完全退出游戏，备份旧插件目录。
+2. 下载 ZIP，找到包含 `HDClientFix_Mcode.toc` 的文件夹，改名为 **`HDClientFix_Mcode`**，放入 `Interface/AddOns/`。
+3. 若仍安装旧 `CharPanelFix_Mcode`、`WDM_ZH_Mcode` 或 `Mcode_CharPanelFix`，将其移到 AddOns 外，保留 WDM 本体、ElvUI 和其他依赖。
+4. 完全重启游戏，启用插件，输入 `/hdfix` 检查依赖并调整各项开关。
 
-## 依赖
+升级已有同名插件时，备份后完整替换目录，避免残留旧文件。账号存档保留，无需手工复制或改名迁移。
 
-- 主要角色面板修复：需要 ElvUI＋ElvUI_Enhanced，并启用其角色面板模块；不满足时不接管原有面板。
-- 试衣间和文字适配：只需要 ElvUI。
-- 自己的 GS 提示：依赖 GearScoreLite。
-- 地图提示：不依赖 ElvUI，使用本 HD 客户端内置 WDM 1.0.5，不替换 WDM 本体。
+## 使用
+
+输入 **`/hdfix`**，或打开 **ESC → 界面 → 插件 → HD 客户端修复**。设置按“角色面板”“其他窗口与提示”“地图”分组，每项独立控制；战斗中请等待脱战后修改。
+
+原 `/cpfix on`、`/cpfix off`、`/cpfix dump`、`/cpfix reload` 命令继续可用。关闭不同修复项是否需要重载，以设置页和 [使用说明](docs/USAGE.md) 为准。
 
 ## 反馈
 
-角色面板仍有重叠、模型缺失或提示被遮挡时，输入 `/cpfix dump` 复制输出，附截图、角色、操作步骤和插件版本。
+遇到文字重叠、模型交互或 GS 显示问题，请附插件版本、ElvUI／Enhanced 状态、操作步骤及截图，并提供 `/cpfix dump` 的输出。
 
-## 说明
-
-- 角色面板修复作者 Mcode；地图提示汉化作者 MuyuQ。感谢提供截图和实测反馈的玩家。
-- 完整玩家说明真源：工程 `doc/玩家/HD客户端修复说明.md`；成品 README 由刷新工具从真源生成。
-- 两个旧插件的提交历史作为合并提交的父历史保留。
+版本以 [`HDClientFix_Mcode.toc`](HDClientFix_Mcode.toc) 为准。角色面板修复作者 Mcode，地图交通提示汉化作者 MuyuQ；感谢提供实测反馈的玩家。
